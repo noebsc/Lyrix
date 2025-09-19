@@ -413,6 +413,11 @@
             cursor: pointer;
             position: relative;
             margin-bottom: 6px;
+            user-select: none;
+        }
+
+        .progress-bar.dragging {
+            cursor: grabbing;
         }
 
         .progress-fill {
@@ -421,6 +426,11 @@
             border-radius: 1.5px;
             width: 0%;
             transition: width 0.1s ease;
+            pointer-events: none;
+        }
+
+        .progress-bar.dragging .progress-fill {
+            transition: none;
         }
 
         .time-display {
@@ -600,6 +610,7 @@
         let scrollTimeout = null;
         let userScrolling = false;
         let mouseMoving = false;
+        let isDragging = false;
 
         // Éléments DOM
         const searchInput = document.getElementById('searchInput');
@@ -620,9 +631,69 @@
         const playBtn = document.getElementById('playBtn');
         const controlsContainer = document.getElementById('controlsContainer');
 
-        // Gestion des contrôles auto-hide CORRIGÉE
+        // Gestion du drag sur la barre de progression
+        function updateProgressFromMouse(e) {
+            const rect = progressBar.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const progress = Math.max(0, Math.min(1, clickX / rect.width));
+            const newTime = progress * totalTime;
+            
+            currentTime = newTime;
+            updateProgress();
+            updateLyrics();
+        }
+
+        // Events pour la barre de progression draggable
+        progressBar.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            progressBar.classList.add('dragging');
+            updateProgressFromMouse(e);
+            showControls();
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                updateProgressFromMouse(e);
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                progressBar.classList.remove('dragging');
+            }
+        });
+
+        // Support tactile pour mobile
+        progressBar.addEventListener('touchstart', (e) => {
+            isDragging = true;
+            progressBar.classList.add('dragging');
+            const touch = e.touches[0];
+            updateProgressFromMouse(touch);
+            showControls();
+            e.preventDefault();
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (isDragging) {
+                const touch = e.touches[0];
+                updateProgressFromMouse(touch);
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('touchend', () => {
+            if (isDragging) {
+                isDragging = false;
+                progressBar.classList.remove('dragging');
+            }
+        });
+
+        // Gestion des contrôles auto-hide
         function hideControls() {
-            if (player.style.display === 'block' && !mouseMoving && !userScrolling) {
+            if (player.style.display === 'block' && !mouseMoving && !userScrolling && !isDragging) {
                 controlsContainer.classList.add('hidden');
                 playerHeader.classList.add('hidden');
                 player.classList.remove('show-cursor');
@@ -669,16 +740,14 @@
             }
         }
 
-        // Events pour auto-hide des contrôles - MOUVEMENT DE SOURIS CORRIGÉ
+        // Events pour auto-hide des contrôles
         player.addEventListener('mousemove', () => {
             showControls();
         });
 
-        // Détection quand la souris quitte la zone du player
         player.addEventListener('mouseleave', () => {
-            // Force la vérification après un délai court
             setTimeout(() => {
-                if (!mouseMoving) {
+                if (!mouseMoving && !isDragging) {
                     hideControls();
                 }
             }, 100);
@@ -856,6 +925,7 @@
             stopPlayback();
             clearTimeout(controlsTimeout);
             mouseMoving = false;
+            isDragging = false;
         }
 
         // Contrôles du lecteur
@@ -877,12 +947,14 @@
             playBtn.innerHTML = '⏸';
             
             progressInterval = setInterval(() => {
-                currentTime += 0.1;
-                updateProgress();
-                updateLyrics();
-                
-                if (currentTime >= totalTime) {
-                    stopPlayback();
+                if (!isDragging) {
+                    currentTime += 0.1;
+                    updateProgress();
+                    updateLyrics();
+                    
+                    if (currentTime >= totalTime) {
+                        stopPlayback();
+                    }
                 }
             }, 100);
         }
@@ -940,14 +1012,6 @@
             const secs = Math.floor(seconds % 60);
             return `${mins}:${secs.toString().padStart(2, '0')}`;
         }
-
-        // Clic sur la barre de progression
-        progressBar.addEventListener('click', (e) => {
-            const rect = progressBar.getBoundingClientRect();
-            const clickX = e.clientX - rect.left;
-            const progress = clickX / rect.width;
-            seekTo(progress * totalTime);
-        });
 
         // Cacher les suggestions en cliquant ailleurs
         document.addEventListener('click', (e) => {
